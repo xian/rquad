@@ -62,13 +62,14 @@ class QuadTree
   attr_accessor :payload, :tl, :br, :depth
   
   # Initialize a new QuadTree with two vectors: its top-left corner and its bottom-right corner.  Optionally, you can also provide a reference to this node's parent node.
-  def initialize(tl, br, parent_node = nil)
+  def initialize(tl, br, parent_node = nil, quadrant = nil)
     @parent = parent_node
+    @quadrant = quadrant
     @tl = tl
     @br = br
     @size = 0
     @summed_contained_vectors = Vector.new(0,0)
-    @depth = 0
+    @depth = parent_node ? parent_node.depth + 1 : 0
   end
   
   # Add a QuadTreePayload to this QuadTree.  If this node is empty, it will be stored in this node.  If not, both the new payload and the old one will be recursively added to the appropriate one of the four children of this node.  There is a special case: if this node already has a payload and the new payload has an identical position to the existing payload, then the new payload will be stored here in ddition to the existing payload.
@@ -97,6 +98,10 @@ class QuadTree
     end
     @summed_contained_vectors += geo_data.vector
     @size += 1
+  end
+
+  def address_of(vector, depth)
+    "#{@quadrant}#{@depth < depth ? get_containing_quad(vector).address_of(vector, depth) : ""}"
   end
 
   # This method returns the payloads contained under this node in the quadtree.  It takes an options hash with the following optional keys:
@@ -131,12 +136,12 @@ class QuadTree
   def get_contained_payloads(options = {})
     get_contained(options)[:payloads]
   end
-  
+
   # Returns the centroid of the payloads contained in this quadtree.
   def center_of_mass
     @summed_contained_vectors / @size
   end
-  
+
   # Performs a breath-first traversal of this quadtree, yielding [node, depth] for each node.
   def breadth_first_each
     queue = [self]
@@ -149,7 +154,7 @@ class QuadTree
       yield node, node.depth
     end
   end
-  
+
   # Yields each payload in this quadtree via a breadth-first traversal.
   def each_payload
     breadth_first_each do |node, depth|
@@ -159,17 +164,17 @@ class QuadTree
       end
     end
   end
-  
+
   # True if this node is a direct parent of `node`.
   def parent_of?(node)
     node && node == tlq(false) || node == trq(false) || node == blq(false) || node == brq(false)
   end
-  
+
   # True if this node is a direct child of `node`.
   def child_of?(node)
     node.parent_of?(self)
   end
-  
+
   # Yields all pseudo-leaves formed when the graph is cut off at a certain depth, plus any leaves encountered before that depth.
   def leaves_each(leaf_depth)
     stack = [self]
@@ -185,17 +190,17 @@ class QuadTree
       end
     end
   end
-  
+
   # Returns the size of this node: the number of contained payloads.
   def size
     @size
   end
-  
+
   # Returns this node's parent node or nil if this node is a root node.
   def parent
     @parent
   end
-  
+
   # Returns approxametly `approx_number` payloads near `location`.
   def approx_near(location, approx_number)
     if approx_number >= size
@@ -204,7 +209,7 @@ class QuadTree
       get_containing_quad(location).approx_near(location, approx_number)
     end
   end
-  
+
   # Returns up to `max_number` payloads inside of the region specified by `region_tl` and `region_br`.
   def payloads_in_region(region_tl, region_br, max_number = nil)
     quad1 = get_containing_quad(region_tl)
@@ -218,7 +223,7 @@ class QuadTree
       get_contained_payloads(:max_count => max_number, :requirement_proc => region_containment_proc)
     end
   end
-  
+
   # Returns an array of [centroid (Vector), count] pairs summarizing the set of centroids at a certain tree depth.  That is, it provides centroids and counts of all of the subtrees still available at depth `depth`, plus any that terminated above that depth.
   def center_of_masses_in_region(region_tl, region_br, depth)
     quad1 = get_containing_quad(region_tl)
@@ -231,10 +236,10 @@ class QuadTree
         centers_of_mass << [node.center_of_mass, node.size]
       end
       centers_of_mass
-    end    
+    end
   end
-  
-  # Returns a hash with keys :payloads and :details.  The :payloads are payloads found, while details are for nodes that didn't get to be explored because the requisite number of payloads were already found.  
+
+  # Returns a hash with keys :payloads and :details.  The :payloads are payloads found, while details are for nodes that didn't get to be explored because the requisite number of payloads were already found.
   def payloads_and_centers_in_region(region_tl, region_br, approx_num_to_return)
     quad1 = get_containing_quad(region_tl)
     quad2 = get_containing_quad(region_br)
@@ -250,28 +255,28 @@ class QuadTree
       get_contained(:max_count => approx_num_to_return, :requirement_proc => region_containment_proc, :details_proc => details_proc)
     end
   end
-    
+
   # The top-left quadrent of this quadtree.  If `build` is true, this will make the quadrent quadtree if it doesn't alredy exist.
   def tlq(build = true)
-    @tlq ||= QuadTree.new(Vector.new(tl), Vector.new(tl.x + (br.x - tl.x) / 2.0, br.y + (tl.y - br.y) / 2.0), self) if build
+    @tlq ||= QuadTree.new(Vector.new(tl), Vector.new(tl.x + (br.x - tl.x) / 2.0, br.y + (tl.y - br.y) / 2.0), self, "2") if build
     @tlq
   end
-  
+
   # The top-right quadrent of this quadtree.  If `build` is true, this will make the quadrent quadtree if it doesn't alredy exist.
   def trq(build = true)
-    @trq ||= QuadTree.new(Vector.new(tl.x + (br.x - tl.x) / 2.0, tl.y), Vector.new(br.x, br.y + (tl.y - br.y) / 2.0), self) if build
+    @trq ||= QuadTree.new(Vector.new(tl.x + (br.x - tl.x) / 2.0, tl.y), Vector.new(br.x, br.y + (tl.y - br.y) / 2.0), self, "1") if build
     @trq
   end
-  
+
   # The bottom-left quadrent of this quadtree.  If `build` is true, this will make the quadrent quadtree if it doesn't alredy exist.
   def blq(build = true)
-    @blq ||= QuadTree.new(Vector.new(tl.x, br.y + (tl.y - br.y) / 2.0), Vector.new(tl.x + (br.x - tl.x) / 2.0, br.y), self) if build
+    @blq ||= QuadTree.new(Vector.new(tl.x, br.y + (tl.y - br.y) / 2.0), Vector.new(tl.x + (br.x - tl.x) / 2.0, br.y), self, "3") if build
     @blq
   end
-  
+
   # The bottom-right quadrent of this quadtree.  If `build` is true, this will make the quadrent quadtree if it doesn't alredy exist.
   def brq(build = true)
-    @brq ||= QuadTree.new(Vector.new(tl.x + (br.x - tl.x) / 2.0, br.y + (tl.y - br.y) / 2.0), Vector.new(br), self) if build
+    @brq ||= QuadTree.new(Vector.new(tl.x + (br.x - tl.x) / 2.0, br.y + (tl.y - br.y) / 2.0), Vector.new(br), self, "4") if build
     @brq
   end
   

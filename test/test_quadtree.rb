@@ -47,7 +47,16 @@ class TestQuadTree < Test::Unit::TestCase
     q.add(QuadTreePayload.new(Vector.new(99, 4), :e))
     q
   end
-  
+
+  def test_address_of
+    q = QuadTree.new(Vector.new(0,100), Vector.new(100,0))
+    assert_equal "333113311331", q.address_of(Vector.new(10, 10), 12)
+    assert_equal "333333333333", q.address_of(Vector.new(0, 0), 12)
+    assert_equal "111111111111", q.address_of(Vector.new(100, 100), 12)
+    assert_equal "333333333133", q.address_of(Vector.new(0.1, 0.1), 12)
+    assert_equal "333333131333", q.address_of(Vector.new(1, 1), 12)
+  end
+
   def test_new_quadtree
     q = QuadTree.new(Vector.new(0,100), Vector.new(100,0))
     assert_equal 0, q.size
